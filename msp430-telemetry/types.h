@@ -8,7 +8,7 @@
 #define u16 unsigned short
 #endif
 #ifndef u32
-#define u32 unsigned long
+#define u32 unsigned int
 #endif
 
 #ifndef s8
@@ -18,7 +18,7 @@
 #define s16 signed short
 #endif
 #ifndef s32
-#define s32 signed long
+#define s32 signed int
 #endif
 
 #ifndef EAGAIN
