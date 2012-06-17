@@ -14,6 +14,8 @@
 #include <msp430_gpio.h>
 #include "board.h"
 #include "types.h"
+#include "msp430_i2c.h"
+
 
 #define ALEN(x) (sizeof(x)/sizeof(x[0]))
 
@@ -68,6 +70,13 @@ static int initialized;
  *   OK
  * 1w write <hex8>...    - write bytes, ie. "1w write 12 3c 8a"
  *   reply: OK:<number of bytes written>
+ *
+ * i2c <hexaddr> write <hex8>...  - write bytes, ie. "i2c 5a write 21 3a"
+ * i2c <hexaddr> read <bytes_dec> - read bytes, ie. "i2c 5a read 2" will read 2 bytes from address 0x5a (so, 0x5a<<1|1, basically). 0-byte read is valid, and can be use to detect device presence.
+ *   example reply:
+ *   I2C 5a DATA 3e 51
+ *   OK
+ * i2c <hexaddr> write <hex8>... read <bytes_dec>  - a merge of write and read commands, commonly used for register writes for I2C devices.
  *
  *
  * Replies and prompts:
@@ -284,6 +293,71 @@ static int handle_1w(const char *line)
 	return 0;
 }
 
+static int handle_i2c(const char *line)
+{
+	int addr = unhex8(line);
+	u8 buf[32];
+	u8 *rxbuf = NULL;
+	u8 *txbuf = NULL;
+	int rxlen, txlen;
+
+	if (addr < 0 || line[2] != ' ')
+		goto error;
+	line += 3;
+
+	if (strncmp(line, "write ", 6) == 0) {
+		line += 5;
+		txlen = 0;
+		txbuf = buf;
+		while (line[0] == ' ') {
+			int data = unhex8(line+1);
+			if (data < 0) {
+				line++;
+				break;
+			}
+			txbuf[txlen++] = data;
+			line += 3;
+		}
+	}
+
+	/* read by itself or after write */
+	if (strncmp(line, "read", 4) == 0 && line[4] != '_') {
+		int n = 0;
+		if (line[4] == ' ')
+			n = undec(line+5);
+
+		if (n > 0) {
+			rxlen = n;
+			rxbuf = buf;
+		}
+
+	} else if (line[0]) {
+		printf("ERROR:unknown i2c command '%s'\n", line);
+		return -1;
+	}
+
+	int r = i2c_write_read(addr, txbuf, txlen, rxbuf, rxlen);
+	if (r < 0) {
+		printf("ERROR:i2c transfer\n");
+		return -1;
+	}
+
+	if (rxbuf) {
+		printf("I2C DATA");
+		while (rxlen--) {
+			printf(" %02x", *rxbuf++);
+		}
+		printf("\n");
+	}
+	printf("OK\n");
+
+	return 0;
+
+ error:
+	printf("ERROR:invalid format\n");
+	return -1;
+}
+
 static int handle_channel(const char *line)
 {
 	int chn;
@@ -340,6 +414,8 @@ static int handle(const char *line)
 {
 	if (strncmp(line, "1w ", 3) == 0) {
 		return handle_1w(line+3);
+	} else if (strncmp(line, "i2c ", 4) == 0) {
+		return handle_i2c(line+4);
 	} else if (strncmp(line, "watchdog ", 9) == 0) {
 		return handle_watchdog(line+9);
 	} else if (strncmp(line, "channel ", 8) == 0) {
@@ -370,8 +446,8 @@ int main(void)
 	/* initialize usci in uart mode */
 	circ_buf_init(&uart_rx, uart_rx_buf, sizeof(uart_rx_buf));
 
-	P1SEL = 0x06;            /* usci rxd, txd - P1.1,P1.2 */
-	P1SEL2 = 0x06;           /* usci rxd, txd - P1.1,P1.2 */
+	P1SEL |= 0x06;            /* usci rxd, txd - P1.1,P1.2 */
+	P1SEL2 |= 0x06;           /* usci rxd, txd - P1.1,P1.2 */
 
 	UCA0CTL1 = UCSWRST;
 	UCA0CTL0 = 0;
@@ -404,6 +480,8 @@ int main(void)
 	int line_pos = 0;
 	//gpio_init(GPIO_P1_6, GPIO_OUTPUT, 1);
 	//gpio_init(GPIO_P1_3, GPIO_INPUT_PU, 0);
+
+	i2c_init(100000);
 
 	__enable_interrupt();
 
