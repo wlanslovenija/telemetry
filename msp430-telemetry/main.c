@@ -277,10 +277,14 @@ static int handle_1w(const char *line)
 
 				temp = tmp[1]<<8 | tmp[0];
 
-				printf("1WIRE DS18B20 %02x%02x%02x%02x%02x%02x%02x%02x %i.%02i\n",
+				printf("1WIRE DS18B20 %02x%02x%02x%02x%02x%02x%02x%02x ",
 						b[0], b[1], b[2], b[3],
-						b[4], b[5], b[6], b[7],
-						temp>>4, 100*(temp&0xf)/16);
+						b[4], b[5], b[6], b[7]);
+				if (temp < 0) {
+					printf("-");
+					temp = -temp;
+				}
+				printf("%i.%02i\n", temp>>4, 100*(temp&0xf)/16);
 			} else {
 				printf("1WIRE DEV %02x%02x%02x%02x%02x%02x%02x%02x\n",
 						b[0], b[1], b[2], b[3],
