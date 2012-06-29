@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include "types.h"
+#include "board.h"
 
 // with help of: http://e2e.ti.com/support/microcontrollers/msp43016-bit_ultra-low_power_mcus/f/166/t/144869.aspx
 
@@ -97,6 +98,7 @@ int i2c_write_read(u8 addr, const u8 *txbuf, int txlen, u8 *rxbuf, int rxlen)
 	fail[0] = UCB0CTL1;
 	fail[1] = UCB0STAT;
 	fail[2]= IFG2;
+	mdelay(1); // XXX hack
 	// XXX around 1ms delay is required here, or it fails at STT clear for restart */
 //	if (txlen == 1 && rxlen == 2) printf("%s: ctl1:0x%02x, stat:0x%02x, ifg:0x%02x\n", __func__, UCB0CTL1, UCB0STAT, IFG2);
 	fail[8] = UCB0CTL1;
