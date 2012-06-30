@@ -1,6 +1,8 @@
 #ifndef _BOARD_H_
 #define _BOARD_H_
 
+
+#define CONFIG_HZ 16000000
 #define F_CPU CONFIG_HZ
 #include <in430.h>
 
@@ -17,5 +19,6 @@ static inline void mdelay(int ms)
 	while (ms--)
 		__delay_cycles(F_CPU/1000);
 }
+
 
 #endif

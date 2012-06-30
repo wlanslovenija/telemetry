@@ -1,5 +1,5 @@
 /* Author: Domen Puncer <domen@cba.si>.  License: WTFPL, see file LICENSE */
-#include <circ_buf.h>
+#include "circ_buf.h"
 #include <string.h>
 #include <errno.h>
 

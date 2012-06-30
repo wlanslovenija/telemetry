@@ -1,7 +1,7 @@
 #ifndef _ARCH_LOCK_H_
 #define _ARCH_LOCK_H_
 
-#include <types.h>
+#include "types.h"
 
 struct lock {
 	u32 primask;
