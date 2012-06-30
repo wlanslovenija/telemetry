@@ -1,5 +1,5 @@
 /* Author: Domen Puncer <domen@cba.si>.  License: WTFPL, see file LICENSE */
-#include <1w.h>
+#include "1w.h"
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
@@ -11,6 +11,8 @@ int w1_reset(struct w1_master *w1)
 	return w1->w1_reset(w1);
 }
 */
+
+#define __FUNCTION__ __func__
 
 #define W1_READ_ROM    0x33
 #define W1_MATCH_ROM   0x55

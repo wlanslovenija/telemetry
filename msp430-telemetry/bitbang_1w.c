@@ -1,9 +1,9 @@
 /* Author: Domen Puncer <domen@cba.si>.  License: WTFPL, see file LICENSE */
-#include <bitbang_1w.h>
-#include <1w.h>
-#include <gpio.h>
-#include <board.h>
-#include <lock.h>
+#include "bitbang_1w.h"
+#include "1w.h"
+#include "gpio.h"
+#include "board.h"
+#include "lock.h":
 #include <errno.h>
 
 

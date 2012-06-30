@@ -10,7 +10,7 @@ enum gpio_mode {
 	GPIO_INPUT_PD = 0x12,
 	GPIO_OUTPUT = 0x20,
 	GPIO_OUTPUT_SLOW = 0x21,
-	GPIO_ANALOG = 0x30,
+	GPIO_ANALOG = 0x30
 };
 
 typedef u16 gpio_t;

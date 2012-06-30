@@ -1,17 +1,18 @@
 /* Author: Domen Puncer <domen@cba.si>.  License: WTFPL */
+/* Modified for CCS: Luka Mustafa <musti@wlan-si.net>*/
 
 /* just some jump optimizations for CCS/IAR, disable */
 #define __even_in_range(x, y) x
 
-#include <isr_compat.h>
-#include <msp430.h>
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
-#include <circ_buf.h>
-#include <1w.h>
-#include <bitbang_1w.h>
-#include <msp430_gpio.h>
+//#include <isr_compat.h>
+#include "msp430.h"
+#include "stdio.h"
+#include "string.h"
+#include "ctype.h"
+#include "circ_buf.h"
+#include "1w.h"
+#include "bitbang_1w.h"
+#include "msp430_gpio.h"
 #include "board.h"
 #include "types.h"
 #include "msp430_i2c.h"
@@ -21,16 +22,21 @@
 
 #define FAMILY_DS18B20 0x28
 
-#define BAUDRATE 115200
-#define GPIO_1W GPIO_P1_0
+//if connected to the router
+//#define BAUDRATE 115200
+//if connected to the launchpad
+#define BAUDRATE 9600
 
-#define HELLO "wlan-si telemetry 0.1"
+//define pin on which 1W bus is
+#define GPIO_1W GPIO_P1_4
+
+#define HELLO "wlan-si telemetry 0.2"
 #define WATCHDOG_TIMEOUT 300 /* seconds */
 #define UNRESET_TIMEOUT  10 /* seconds */
 #define SCANREAD_TIMEOUT 60 /* seconds */
 
-
-static const gpio_t channels[6] = { GPIO_P1_3, GPIO_P1_4, GPIO_P1_5, GPIO_P2_0, GPIO_P2_1, GPIO_P2_2 };
+//define here which pins are controlled on-off
+static const gpio_t channels[6] = { GPIO_P1_0, GPIO_P2_3, GPIO_P2_4, GPIO_P2_0, GPIO_P2_1, GPIO_P2_2 };
 
 static int watchdog_channel; /* 0 disabled, 1-6 channel */
 static int watchdog_timeout; /* transition to zero triggers the reset procedure */
@@ -567,8 +573,9 @@ static void tick_1s_handler(void)
 	}
 }
 
-__attribute__((interrupt(TIMER0_A0_VECTOR)))
-void Timer_A_ISR(void)
+// Timer A0 interrupt service routine
+#pragma vector=TIMER0_A0_VECTOR
+__interrupt void Timer_A (void)
 {
 	static int second_counter;
 	TACCR0 += 50000; /* 25ms later */
@@ -579,8 +586,9 @@ void Timer_A_ISR(void)
 	}
 }
 
-__attribute__((interrupt(USCIAB0RX_VECTOR)))
-void USCI0RX_ISR(void)
+//RX interrupt
+#pragma vector=USCIAB0RX_VECTOR
+__interrupt void USCI0RX_ISR(void)
 {
 	circ_buf_put_one(&uart_rx, UCA0RXBUF);
 }      
