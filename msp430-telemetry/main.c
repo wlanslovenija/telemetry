@@ -29,6 +29,7 @@
 
 //define pin on which 1W bus is
 #define GPIO_1W GPIO_P1_4
+#define GPIO_INTERRUPT GPIO_P1_5 /* you still need to change it below! */
 
 #define HELLO "wlan-si telemetry 0.2"
 #define WATCHDOG_TIMEOUT 300 /* seconds */
@@ -42,6 +43,8 @@ static int watchdog_channel; /* 0 disabled, 1-6 channel */
 static int watchdog_timeout; /* transition to zero triggers the reset procedure */
 static int unreset_timeout; /* transition to zero finishes the reset line */
 static int scanread_timeout; /* transition to zero triggers scan_read command */
+
+volatile static u16 gpio_interrupt;
 
 static int reset_pending;
 static int unreset_pending;
@@ -90,6 +93,7 @@ static int initialized;
  * ERROR                 - command failed, possible extra arguments
  * WATCHDOG reset        - watchdog reset triggered
  * WATCHDOG unreset      - watchdog, reset line released
+ * INTERRUPT <hex16>     - there was an interrupt on pin(s), hex mask, bit 0 is P1.0, bit 15 P2.7
  *
  * 
  * Uninitialized (before ATZ) device.
@@ -459,6 +463,20 @@ int main(void)
 	P1SEL |= 0x06;            /* usci rxd, txd - P1.1,P1.2 */
 	P1SEL2 |= 0x06;           /* usci rxd, txd - P1.1,P1.2 */
 
+	/* setup GPIO_INTERRUPT, P1.5, interrupt on rise */
+	gpio_init(GPIO_INTERRUPT, GPIO_INPUT_PD, 0);
+	//P1IES |= 1<<5; /* falling */
+	P1IES &= ~(1<<5); /* rising */
+	P1IFG &= ~(1<<5);
+	P1IE |= 1<<5;
+#if 0
+	/* example for GPIO_P2_5 */
+	gpio_init(GPIO_P2_5, GPIO_INPUT_PD, 0);
+	P2IES &= ~(1<<5); /* rising */
+	P2IFG &= ~(1<<5);
+	P2IE |= 1<<5;
+#endif
+
 	UCA0CTL1 = UCSWRST;
 	UCA0CTL0 = 0;
 	u16 br = (CONFIG_HZ+BAUDRATE/2)/BAUDRATE;
@@ -513,6 +531,10 @@ int main(void)
 			printf("WATCHDOG unreset\n");
 			unreset_pending = 0;
 			gpio_set(channels[watchdog_channel-1], 0);
+		}
+		if (gpio_interrupt) {
+			printf("INTERRUPT %04x\n", gpio_interrupt);
+			gpio_interrupt = 0;
 		}
 
 		//gpio_set(GPIO_P1_6, gpio_get(GPIO_P1_3));
@@ -601,4 +623,29 @@ __interrupt void USCI0RX_ISR(void)
 #endif
 {
 	circ_buf_put_one(&uart_rx, UCA0RXBUF);
-}      
+}
+
+// GPIO interrupts P1
+#ifdef __GNUC__
+__attribute__((interrupt(PORT1_VECTOR)))
+void P1_ISR(void)
+#else
+#pragma vector=PORT1_VECTOR
+__interrupt void P1_ISR(void)
+#endif
+{
+	gpio_interrupt |= P1IFG;
+	P1IFG = 0;
+}
+// GPIO interrupts P2
+#ifdef __GNUC__
+__attribute__((interrupt(PORT2_VECTOR)))
+void P2_ISR(void)
+#else
+#pragma vector=PORT2_VECTOR
+__interrupt void P2_ISR(void)
+#endif
+{
+	gpio_interrupt |= P2IFG << 8;
+	P2IFG = 0;
+}
