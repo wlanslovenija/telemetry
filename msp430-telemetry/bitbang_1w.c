@@ -17,14 +17,22 @@ static int bitbang_1w_reset(struct w1_master *master)
 {
 	struct bitbang_1w_data *chip = master->priv;
 	int pin = chip->pin;
+	int present;
 
 	gpio_init(pin, GPIO_OUTPUT, 0);
 	udelay(500);
 	gpio_init(pin, GPIO_INPUT, 0);
-	/* could read for presense here */
-	udelay(500);
 
-	return 0;
+	/* 15-60 of delay, then 60-240us long presence slot */
+	udelay(65);
+	present = gpio_get(pin);
+	udelay(500-65);
+	present |= gpio_get(pin)<<1;
+
+	if (present == 0x2)
+		return 0;
+
+	return -ENODEV;
 }
 
 /*
