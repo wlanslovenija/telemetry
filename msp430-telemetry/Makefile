@@ -1,5 +1,5 @@
 NAME=telemetry
-SRCS=main.c gpio.c msp430_gpio.c circ_buf.c printf.c 1w.c bitbang_1w.c msp430_i2c.c
+SRCS=main.c gpio.c msp430_gpio.c circ_buf.c printf.c 1w.c bitbang_1w.c
 #MCU=msp430g2432
 #MCU=msp430f2274 # msp430 ez2500
 #MCU=msp430g2452 # launchpad mcu1

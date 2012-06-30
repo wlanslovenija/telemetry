@@ -36,7 +36,7 @@
 
 //#define TESTS
 
-#include <stdio.h>
+//#include <stdio.h>
 #include <stdarg.h>
 #include <limits.h>
 #include <string.h>
@@ -370,7 +370,7 @@ int _printf(const char *format, ...)
 }
 
 /* maybe also somewhat handle stream etc. */
-int _fprintf(FILE *stream, const char *format, ...)
+int fprintf(FILE *stream, const char *format,...)
 {
 	int r;
 	va_list va;

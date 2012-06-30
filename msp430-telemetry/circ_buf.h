@@ -1,7 +1,7 @@
 #ifndef _CIRC_BUF_H_
 #define _CIRC_BUF_H_
 
-#include <types.h>
+#include "types.h"
 
 /* A nice lockless circ buffer. One reader, one writer, or it will break */
 
