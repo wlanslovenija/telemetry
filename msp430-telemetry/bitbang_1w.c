@@ -3,7 +3,7 @@
 #include "1w.h"
 #include "gpio.h"
 #include "board.h"
-#include "lock.h":
+#include "lock.h"
 #include <errno.h>
 
 

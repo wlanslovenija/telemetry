@@ -14,7 +14,6 @@
 
 #define SDA_PIN 0x80
 #define SCL_PIN 0x40
-#define CONFIG_HZ 16000000
 
 
 #define EFAULT 22

@@ -12,8 +12,6 @@ int w1_reset(struct w1_master *w1)
 }
 */
 
-#define __FUNCTION__ __func__
-
 #define W1_READ_ROM    0x33
 #define W1_MATCH_ROM   0x55
 #define W1_SKIP_ROM    0xcc

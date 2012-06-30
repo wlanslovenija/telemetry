@@ -574,8 +574,13 @@ static void tick_1s_handler(void)
 }
 
 // Timer A0 interrupt service routine
+#ifdef __GNUC__
+__attribute__((interrupt(TIMER0_A0_VECTOR)))
+void Timer_A_ISR(void)
+#else
 #pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer_A (void)
+#endif
 {
 	static int second_counter;
 	TACCR0 += 50000; /* 25ms later */
@@ -587,8 +592,13 @@ __interrupt void Timer_A (void)
 }
 
 //RX interrupt
+#ifdef __GNUC__
+__attribute__((interrupt(USCIAB0RX_VECTOR)))
+void USCI0RX_ISR(void)
+#else
 #pragma vector=USCIAB0RX_VECTOR
 __interrupt void USCI0RX_ISR(void)
+#endif
 {
 	circ_buf_put_one(&uart_rx, UCA0RXBUF);
 }      

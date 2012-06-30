@@ -2,7 +2,10 @@
 #define _BOARD_H_
 
 
+#ifndef CONFIG_HZ
 #define CONFIG_HZ 16000000
+#endif
+
 #define F_CPU CONFIG_HZ
 #include <in430.h>
 
