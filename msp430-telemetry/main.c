@@ -28,16 +28,35 @@
 #define BAUDRATE 9600
 
 //define pin on which 1W bus is
-#define GPIO_1W GPIO_P1_4
-#define GPIO_INTERRUPT GPIO_P1_5 /* you still need to change it below! */
+#define GPIO_1W GPIO_P1_5
 
 #define HELLO "wlan-si telemetry 0.2"
 #define WATCHDOG_TIMEOUT 300 /* seconds */
 #define UNRESET_TIMEOUT  10 /* seconds */
 #define SCANREAD_TIMEOUT 60 /* seconds */
 
-//define here which pins are controlled on-off
-static const gpio_t channels[6] = { GPIO_P1_0, GPIO_P2_3, GPIO_P2_4, GPIO_P2_0, GPIO_P2_1, GPIO_P2_2 };
+
+/* list of channels and default values (0 = on, 1 = off) */
+static const struct {
+	gpio_t gpio;
+	int value;
+} channels[] = {
+	{ GPIO_P2_0, 0 },
+	{ GPIO_P2_1, 0 },
+	{ GPIO_P2_2, 0 },
+	{ GPIO_P2_3, 0 },
+	{ GPIO_P1_3, 0 },
+	{ GPIO_P1_4, 0 },
+};
+
+enum gpio_trigger { GPIO_RISING, GPIO_FALLING };
+/* list of gpio interrupts */
+static const struct {
+	gpio_t gpio;
+	enum gpio_trigger trigger;
+} gpio_interrupts[] = {
+	{ GPIO_P1_0, GPIO_RISING },
+};
 
 static int watchdog_channel; /* 0 disabled, 1-6 channel */
 static int watchdog_timeout; /* transition to zero triggers the reset procedure */
@@ -385,11 +404,11 @@ static int handle_channel(const char *line)
 
 	if (strcmp(line, "on") == 0) {
 		printf("OK\n");
-		gpio_set(channels[chn-1], 0);
+		gpio_set(channels[chn-1].gpio, 0);
 	} else
 	if (strcmp(line, "off") == 0) {
 		printf("OK\n");
-		gpio_set(channels[chn-1], 1);
+		gpio_set(channels[chn-1].gpio, 1);
 	} else {
 		printf("ERROR:channel arguments\n");
 	}
@@ -444,6 +463,36 @@ static int handle(const char *line)
 	return 0;
 }
 
+
+static void msp430_gpio_interrupt(gpio_t gpio, enum gpio_trigger trigger)
+{
+	int port = (gpio & 0xf0) >> 4;
+	int pin = gpio & 0xf;
+
+	if (trigger == GPIO_RISING) {
+		gpio_init(gpio, GPIO_INPUT_PD, 0);
+		if (port == 1)
+			P1IES &= ~(1<<pin);
+		else if (port == 2)
+			P2IES &= ~(1<<pin);
+	} else {
+		gpio_init(gpio, GPIO_INPUT_PU, 0);
+		if (port == 1)
+			P1IES |= 1<<pin;
+		else if (port == 2)
+			P2IES |= 1<<pin;
+	}
+
+	if (port == 1) {
+		P1IFG &= ~(1<<pin);
+		P1IE |= 1<<pin;
+	} else if (port == 2) {
+		P2IFG &= ~(1<<pin);
+		P2IE |= 1<<pin;
+	}
+}
+
+
 int main(void)
 {
 	WDTCTL = WDTPW + WDTHOLD; /* stop watchdog */
@@ -463,19 +512,10 @@ int main(void)
 	P1SEL |= 0x06;            /* usci rxd, txd - P1.1,P1.2 */
 	P1SEL2 |= 0x06;           /* usci rxd, txd - P1.1,P1.2 */
 
-	/* setup GPIO_INTERRUPT, P1.5, interrupt on rise */
-	gpio_init(GPIO_INTERRUPT, GPIO_INPUT_PD, 0);
-	//P1IES |= 1<<5; /* falling */
-	P1IES &= ~(1<<5); /* rising */
-	P1IFG &= ~(1<<5);
-	P1IE |= 1<<5;
-#if 0
-	/* example for GPIO_P2_5 */
-	gpio_init(GPIO_P2_5, GPIO_INPUT_PD, 0);
-	P2IES &= ~(1<<5); /* rising */
-	P2IFG &= ~(1<<5);
-	P2IE |= 1<<5;
-#endif
+	int i;
+	/* setup gpio interrupts */
+	for (i=0; i<ALEN(gpio_interrupts); i++)
+		msp430_gpio_interrupt(gpio_interrupts[i].gpio, gpio_interrupts[i].trigger);
 
 	UCA0CTL1 = UCSWRST;
 	UCA0CTL0 = 0;
@@ -500,9 +540,8 @@ int main(void)
 	bitbang_1w_register(w1);
 
 	/* initialize channels */
-	int i;
 	for (i=0; i<ALEN(channels); i++)
-		gpio_init(channels[i], GPIO_OUTPUT, 0);
+		gpio_init(channels[i].gpio, GPIO_OUTPUT, channels[i].value);
 
 	char line[64];
 	int line_pos = 0;
@@ -525,12 +564,12 @@ int main(void)
 		if (reset_pending) {
 			printf("WATCHDOG reset\n");
 			reset_pending = 0;
-			gpio_set(channels[watchdog_channel-1], 1);
+			gpio_set(channels[watchdog_channel-1].gpio, 1);
 		}
 		if (unreset_pending) {
 			printf("WATCHDOG unreset\n");
 			unreset_pending = 0;
-			gpio_set(channels[watchdog_channel-1], 0);
+			gpio_set(channels[watchdog_channel-1].gpio, 0);
 		}
 		if (gpio_interrupt) {
 			printf("INTERRUPT %04x\n", gpio_interrupt);
