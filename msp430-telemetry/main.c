@@ -35,8 +35,19 @@
 #define UNRESET_TIMEOUT  10 /* seconds */
 #define SCANREAD_TIMEOUT 60 /* seconds */
 
+/*
+ * vnq05xsp16 wiring:
+ * SELB     P2.6
+ * SELA     P2.7
+ * SENSEN   P2.5  active high
+ * CSENSE   P2.4  470R to gnd U=R/I
+ */
+#define SELA     GPIO_P2_7
+#define SELB     GPIO_P2_6
+#define SENSEN   GPIO_P2_5
+#define CSENSE   GPIO_P2_4
 
-/* list of channels and default values (0 = on, 1 = off) */
+/* list of channels and default values (0 = off, 1 = on) */
 static const struct {
 	gpio_t gpio;
 	int value;
@@ -77,6 +88,7 @@ static int initialized;
  *   reply: OK:wlan-si telemetry 0.1
  * channel <channel> on  - set output channel to 1
  * channel <channel> off - set output channel to 0
+ * csense                - display current consumption for channels 1-4
  * watchdog on <channel> - start 300s watchdog, if no ping received, reboot is triggered
  * watchdog off          - disable watchdog
  * watchdog ping         - reset watchdog timer to 300s
@@ -404,13 +416,38 @@ static int handle_channel(const char *line)
 
 	if (strcmp(line, "on") == 0) {
 		printf("OK\n");
-		gpio_set(channels[chn-1].gpio, 0);
+		gpio_set(channels[chn-1].gpio, 1);
 	} else
 	if (strcmp(line, "off") == 0) {
 		printf("OK\n");
-		gpio_set(channels[chn-1].gpio, 1);
+		gpio_set(channels[chn-1].gpio, 0);
 	} else {
 		printf("ERROR:channel arguments\n");
+	}
+
+	return 0;
+}
+
+static int adc_read(void)
+{
+	ADC10CTL0 |= ENC + ADC10SC;
+	while (ADC10CTL1 & ADC10BUSY)
+		;
+	return ADC10MEM;
+}
+
+static int handle_csense(void)
+{
+	int i;
+
+	for (i=0; i<4; i++) {
+		gpio_set(SELA, (i&1) == 1);
+		gpio_set(SELB, (i&2) == 2);
+		gpio_set(SENSEN, 1);
+		mdelay(1); /* csense delay is max 500us */
+		printf("CSENSE %i %i\n", i+1, adc_read());
+
+		gpio_set(SENSEN, 0);
 	}
 
 	return 0;
@@ -453,6 +490,8 @@ static int handle(const char *line)
 		return handle_watchdog(line+9);
 	} else if (strncmp(line, "channel ", 8) == 0) {
 		return handle_channel(line+8);
+	} else if (strcmp(line, "csense") == 0) {
+		return handle_csense();
 	} else if (strcmp(line, "atz") == 0) {
 		printf("OK:%s\n", HELLO);
 		initialized = 1;
@@ -539,6 +578,19 @@ int main(void)
 	w1->priv = &bitbang_1w_data;
 	bitbang_1w_register(w1);
 
+	/* initialize vnq05xsp16 */
+	/* use xtal pins as gpio */
+	P2SEL &= ~(1<<6);
+	P2SEL2 &= ~(1<<6);
+	P2SEL &= ~(1<<7);
+	P2SEL2 &= ~(1<<7);
+	gpio_init(SELA, GPIO_OUTPUT, 0);
+	gpio_init(SELB, GPIO_OUTPUT, 0);
+	gpio_init(SENSEN, GPIO_OUTPUT, 0);
+	gpio_init(CSENSE, GPIO_INPUT, 0);
+	ADC10CTL1 = INCH_0; /* set input channel, P1.0 */
+	ADC10CTL0 = SREF_1 /* Vref */ + ADC10SHT_2 + REFON + ADC10ON;
+
 	/* initialize channels */
 	for (i=0; i<ALEN(channels); i++)
 		gpio_init(channels[i].gpio, GPIO_OUTPUT, channels[i].value);
@@ -564,12 +616,12 @@ int main(void)
 		if (reset_pending) {
 			printf("WATCHDOG reset\n");
 			reset_pending = 0;
-			gpio_set(channels[watchdog_channel-1].gpio, 1);
+			gpio_set(channels[watchdog_channel-1].gpio, 0);
 		}
 		if (unreset_pending) {
 			printf("WATCHDOG unreset\n");
 			unreset_pending = 0;
-			gpio_set(channels[watchdog_channel-1].gpio, 0);
+			gpio_set(channels[watchdog_channel-1].gpio, 1);
 		}
 		if (gpio_interrupt) {
 			printf("INTERRUPT %04x\n", gpio_interrupt);
