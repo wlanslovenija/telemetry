@@ -21,4 +21,5 @@ clean:
 	rm -f $(OBJS) $(NAME).elf
 
 cscope:
-	cscope -Rb -s /usr/msp430/include/
+	#cscope -Rb -s /usr/msp430/include/
+	./cscope.sh
