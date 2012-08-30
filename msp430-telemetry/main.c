@@ -338,8 +338,24 @@ static int handle_1w(const char *line)
 	return 0;
 }
 
+static void i2c_power_cycle(void)
+{
+#if 0
+	gpio_set(I2C_POWER, 0);
+	mdelay(10);
+	gpio_set(I2C_POWER, 1);
+#endif
+}
+
 static int handle_i2c(const char *line)
 {
+	/* i2c slaves power cycle */
+	if (strcmp(line, "reset") == 0) {
+		i2c_power_cycle();
+		printf("OK\n");
+		return 0;
+	}
+
 	int addr = unhex8(line);
 	u8 buf[32];
 	u8 *rxbuf = NULL;
@@ -430,10 +446,19 @@ static int handle_channel(const char *line)
 
 static int adc_read(void)
 {
-	ADC10CTL0 |= ENC + ADC10SC;
-	while (ADC10CTL1 & ADC10BUSY)
-		;
-	return ADC10MEM;
+	const int maxreads = 1000;
+	int i;
+	u32 average = 0;
+
+	for (i=0; i<maxreads; i++) {
+		ADC10CTL0 |= ENC + ADC10SC;
+		while (ADC10CTL1 & ADC10BUSY)
+			;
+		average += ADC10MEM;
+	}
+
+	average = (average+maxreads/2) / maxreads;
+	return average;
 }
 
 static int handle_csense(void)
@@ -449,6 +474,7 @@ static int handle_csense(void)
 
 		gpio_set(SENSEN, 0);
 	}
+	printf("OK\n");
 
 	return 0;
 }
@@ -496,6 +522,10 @@ static int handle(const char *line)
 		printf("OK:%s\n", HELLO);
 		initialized = 1;
 		return 0;
+	} else if (strcmp(line, "hang") == 0) {
+		/* test watchdog works */
+		while (1)
+			;
 	}
 
 	printf("ERROR:unknown command '%s'\n", line);
@@ -544,6 +574,12 @@ int main(void)
 #else
 #error "invalid CONFIG_HZ"
 #endif
+
+	/* set up watchdog to run off ACLK */
+	/* internal VLO clock runs at 4-20MHz */
+	BCSCTL1 |= DIVA_3; /* XTS=0, DIVAx=/8 */
+	BCSCTL3 = LFXT1S_2; /* VLO */
+	WDTCTL = WDTPW | WDTSSEL /* ACLK */ | WDTCNTCL /* counter clear */;
 
 	/* initialize usci in uart mode */
 	circ_buf_init(&uart_rx, uart_rx_buf, sizeof(uart_rx_buf));
@@ -600,6 +636,8 @@ int main(void)
 	//gpio_init(GPIO_P1_6, GPIO_OUTPUT, 1);
 	//gpio_init(GPIO_P1_3, GPIO_INPUT_PU, 0);
 
+	i2c_power_cycle();
+
 	i2c_init(100000);
 
 	__enable_interrupt();
@@ -609,6 +647,8 @@ int main(void)
 	scanread_timeout = SCANREAD_TIMEOUT;
 
 	for (;;) {
+		WDTCTL = WDTPW | WDTSSEL /* ACLK */ | WDTCNTCL /* counter clear */;
+
 		if (!initialized && scanread_pending) {
 			scanread_pending = 0;
 			handle("1w scan_read");
