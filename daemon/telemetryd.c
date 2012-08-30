@@ -17,6 +17,8 @@ static int nodaemon;
 static int baudrate = 115200;
 static const char *uart = "/dev/ttyS0";
 static int interval = 60;
+static int i2c_interval = 10;
+static int csense_interval = 10;
 
 
 static void help(const char *prog)
@@ -147,6 +149,102 @@ static int readline(int fd, char *line, int maxlen)
 	/* doesn't come this far */
 }
 
+
+static int handle_interrupt_reply(const char *line)
+{
+	int i;
+	int pins = strtol(line+10, NULL, 16);
+	for (i=0; i<16; i++) {
+		if (pins & (1<<i))
+			printf("received interrupt on pin P%i.%i\n",
+					1 + i>=8, i%8);
+	}
+	return 0;
+}
+
+static int handle_unknown_reply(const char *line)
+{
+	printf("BUG received %s for unknown command\n", line);
+
+	return 0;
+}
+
+static int handle_1w(int fd)
+{
+	const char *cmd = "1w scan_read\n";
+	write(fd, cmd, strlen(cmd));
+
+	return 0;
+}
+
+static int handle_1w_reply(const char *line)
+{
+	/* 1WIRE DS18B20 288055bb03000052 20.75 */
+	if (strncmp(line, "1WIRE DS18B20 ", 14) == 0) {
+		FILE *f;
+		char filename[128];
+		char id[17];
+		strcpy(id, &line[14]);
+		id[16] = '\0';
+		if (strspn(id, "0123456789abcdef") != 16) {
+			fprintf(stderr, "device id (%s) invalid\n", id);
+			return -EINVAL;
+		}
+		snprintf(filename, sizeof(filename), "/tmp/telemetry.ds18b20.%s", id);
+		f = fopen(filename, "w");
+		if (!f) {
+			perror(filename);
+			return -EACCES;
+		}
+		fprintf(f, "%s\n", line+14+17);
+		fclose(f);
+	}
+
+	return 0;
+}
+
+/* some example communication code for ina219 */
+static int handle_i2c(int fd)
+{
+	/* read voltage reg */
+	const char *cmd = "i2c 40 write 02 read 2\n";
+	write(fd, cmd, strlen(cmd));
+
+	return 0;
+}
+
+static int handle_i2c_reply(const char *line)
+{
+	if (strncmp(line, "I2C DATA ", 9) == 0) {
+		int reg = strtol(line+9, NULL, 16)<<8 | strtol(line+9+3, NULL, 16);
+		printf("ina219 reg 2: 0x%x, bus voltage: %imV\n", reg, reg*4);
+	}
+
+	return 0;
+}
+
+static int handle_csense(int fd)
+{
+	const char *cmd = "csense\n";
+	write(fd, cmd, strlen(cmd));
+
+	return 0;
+}
+
+static int handle_csense_reply(const char *line)
+{
+	if (strncmp(line, "CSENSE ", 7) == 0) {
+		int senseline = atoi(line+7);
+		int current = atoi(line+9);
+		printf("current consumption on line %i: %i units\n",
+				senseline, current);
+	}
+
+	return 0;
+}
+
+
+
 int main(int argc, char **argv)
 {
 	int fd;
@@ -200,17 +298,44 @@ int main(int argc, char **argv)
 	}
 
 	time_t scan_read = time_mono();
+	time_t time_i2c = time_mono();
+	time_t time_csense = time_mono();
 
 	while (1) {
+
 		/* send commands */
 		time_t now = time_mono();
+		int (*handle_reply)(const char *) = handle_unknown_reply;
+
+		/* 1-wire example */
 		if (now - scan_read >= interval) {
-			const char *cmd = "1w scan_read\n";
-			write(fd, cmd, strlen(cmd));
 			scan_read = now;
+
+			if (handle_1w(fd) < 0)
+				break;
+			handle_reply = handle_1w_reply;
 		}
 
-		/* parse replies */
+		/* i2c example */
+		if (now - time_i2c >= i2c_interval) {
+			time_i2c = now;
+
+			if (handle_i2c(fd) < 0)
+				break;
+			handle_reply = handle_i2c_reply;
+		}
+
+		/* csense */
+		if (now - time_csense >= csense_interval) {
+			time_csense = now;
+
+			if (handle_csense(fd) < 0)
+				break;
+			handle_reply = handle_csense_reply;
+		}
+
+
+		/* handle command replies */
 		int n = readline(fd, line, sizeof(line));
 		if (n < 0 && n != -EAGAIN)
 			return -1;
@@ -218,25 +343,30 @@ int main(int argc, char **argv)
 			continue;
 		printf("serial receive: %s\n", line);
 
-		/* 1WIRE DS18B20 288055bb03000052 20.75 */
-		if (strncmp(line, "1WIRE DS18B20 ", 14) == 0) {
-			FILE *f;
-			char filename[128];
-			char *id = &line[14];
-			id[16] = '\0';
-			if (strspn(id, "0123456789abcdef") != 16) {
-				fprintf(stderr, "device id (%s) invalid\n", id);
-				continue;
-			}
-			snprintf(filename, sizeof(filename), "/tmp/telemetry.ds18b20.%s", id);
-			f = fopen(filename, "w");
-			if (!f) {
-				perror(filename);
-				continue;
-			}
-			fprintf(f, "%s\n", id+17);
-			fclose(f);
+		if (strncmp(line, "ERROR", 5) == 0)
+			handle_reply(line);
+			handle_reply = handle_unknown_reply;
+			continue;
+
+		/* expect linestogo 1WIRE... replies */
+		if (strncmp(line, "OK", 2) == 0) {
+			handle_reply(line);
+			handle_reply = handle_unknown_reply;
+			continue;
 		}
+
+		if (strncmp(line, "1WIRE", 5) == 0)
+			handle_1w_reply(line);
+		else if (strncmp(line, "I2C", 3) == 0)
+			handle_i2c_reply(line);
+		else if (strncmp(line, "CSENSE", 6) == 0)
+			handle_csense_reply(line);
+		else if (strncmp(line, "INTERRUPT", 9) == 0)
+			handle_interrupt_reply(line);
+		else {
+			printf("unknown reply: %s\n", line);
+		}
+
 	}
 
 	tcsetattr(fd, TCSANOW, &sio);
