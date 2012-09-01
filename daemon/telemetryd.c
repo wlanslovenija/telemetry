@@ -217,7 +217,19 @@ static int handle_i2c_reply(const char *line)
 {
 	if (strncmp(line, "I2C DATA ", 9) == 0) {
 		int reg = strtol(line+9, NULL, 16)<<8 | strtol(line+9+3, NULL, 16);
-		printf("ina219 reg 2: 0x%x, bus voltage: %imV\n", reg, reg*4);
+		int voltage = reg*4;
+		printf("ina219 reg 2: 0x%x, bus voltage: %imV\n", reg, voltage);
+
+		FILE *f;
+		char filename[128];
+		snprintf(filename, sizeof(filename), "/tmp/telemetry.ina219.voltage");
+		f = fopen(filename, "w");
+		if (!f) {
+			perror(filename);
+			return -EACCES;
+		}
+		fprintf(f, "%i\n", voltage);
+		fclose(f);
 	}
 
 	return 0;
@@ -238,6 +250,17 @@ static int handle_csense_reply(const char *line)
 		int current = atoi(line+9);
 		printf("current consumption on line %i: %i units\n",
 				senseline, current);
+
+		FILE *f;
+		char filename[128];
+		snprintf(filename, sizeof(filename), "/tmp/telemetry.csense.%i", senseline);
+		f = fopen(filename, "w");
+		if (!f) {
+			perror(filename);
+			return -EACCES;
+		}
+		fprintf(f, "%i\n", current);
+		fclose(f);
 	}
 
 	return 0;
@@ -343,10 +366,11 @@ int main(int argc, char **argv)
 			continue;
 		printf("serial receive: %s\n", line);
 
-		if (strncmp(line, "ERROR", 5) == 0)
+		if (strncmp(line, "ERROR", 5) == 0) {
 			handle_reply(line);
 			handle_reply = handle_unknown_reply;
 			continue;
+		}
 
 		/* expect linestogo 1WIRE... replies */
 		if (strncmp(line, "OK", 2) == 0) {
