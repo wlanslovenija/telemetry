@@ -19,6 +19,8 @@ static const char *uart = "/dev/ttyS0";
 static int interval = 60;
 static int i2c_interval = 10;
 static int csense_interval = 10;
+static int watchdog_channel; /* disabled by default */
+static int watchdog_interval = 60; /* 300s watchdog timeout on msp430 */
 
 
 static void help(const char *prog)
@@ -29,7 +31,8 @@ static void help(const char *prog)
 		"       -f              don't daemonize\n"
 		"       -b baudrate     set baudrate (default 115200)\n"
 		"       -d serial       set serial device (default /dev/ttyS0)\n"
-		"       -i interval     set reading interval (in seconds, default 60)\n"
+		"       -i interval     set 1-wire reading interval (in seconds, default 60)\n"
+		"       -w watchdog_ch  watchdog channel\n"
 	      );
 }
 
@@ -37,7 +40,7 @@ static int parse_options(int argc, char **argv)
 {
 	int c;
 
-	while ((c = getopt(argc, argv, "hfb:d:i:")) != EOF) {
+	while ((c = getopt(argc, argv, "hfb:d:i:w:")) != EOF) {
 		switch (c) {
 		case 'h':
 			help(argv[0]);
@@ -57,6 +60,9 @@ static int parse_options(int argc, char **argv)
 				fprintf(stderr, "%s: interval too small, setting to 5\n", argv[0]);
 				interval = 5;
 			}
+			break;
+		case 'w':
+			watchdog_channel = atoi(optarg);
 			break;
 		default:
 			fprintf(stderr, "invalid option %c\n", c);
@@ -320,9 +326,18 @@ int main(int argc, char **argv)
 		fprintf(stderr, "didn't detect telemetry circuit on %s\n", uart);
 	}
 
+	if (watchdog_channel) {
+		char tmp[32];
+		sprintf(tmp, "watchdog on %i\n", watchdog_channel);
+		write(fd, tmp, strlen(tmp));
+	} else {
+		write(fd, "watchdog off\n", 13);
+	}
+
 	time_t scan_read = time_mono();
 	time_t time_i2c = time_mono();
 	time_t time_csense = time_mono();
+	time_t time_watchdog = time_mono();
 
 	while (1) {
 
@@ -355,6 +370,15 @@ int main(int argc, char **argv)
 			if (handle_csense(fd) < 0)
 				break;
 			handle_reply = handle_csense_reply;
+		}
+
+		/* watchdog */
+		if (watchdog_channel && now - time_watchdog >= watchdog_interval) {
+			time_watchdog = now;
+			const char *cmd = "watchdog ping\n";
+			write(fd, cmd, strlen(cmd));
+
+			handle_reply = handle_unknown_reply;
 		}
 
 
