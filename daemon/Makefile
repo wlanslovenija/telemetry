@@ -1,17 +1,17 @@
 CC=gcc
 LD=gcc
 
-TARGET=telemetryd
-SRCS=telemetryd.c
+TARGETS=telemetryd telemetry-command
+SRCS=telemetryd.c telemetry-command.c
 
 CFLAGS=-Wall -O2
 LDFLAGS=-lrt
 
-default: $(TARGET)
+default: $(TARGETS)
 
 OBJS=$(SRCS:.c=.o)
 
-%.o:%.c
+$(OBJS): %.o:%.c
 	@echo compiling $<
 ifeq ($(V), 1)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -19,13 +19,13 @@ else
 	@$(CC) $(CFLAGS) -c $< -o $@
 endif
 
-$(TARGET): $(OBJS)
-	@echo linking into $(TARGET)
+$(TARGETS): %:%.o
+	@echo linking into $@
 ifeq ($(V), 1)
-	$(LD) $(LDFLAGS) $(OBJS) -o $@
+	$(LD) $< $(LDFLAGS) -o $@
 else
-	@$(LD) $(LDFLAGS) $(OBJS) -o $@
+	@$(LD) $< $(LDFLAGS) -o $@
 endif
 
 clean:
-	rm -rf $(OBJS) $(TARGET)
+	rm -rf $(OBJS) $(TARGETS)

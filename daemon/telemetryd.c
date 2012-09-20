@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <mqueue.h>
 
 
 static int nodaemon;
@@ -334,6 +335,17 @@ int main(int argc, char **argv)
 		write(fd, "watchdog off\n", 13);
 	}
 
+	struct mq_attr mq_attr = {
+		.mq_maxmsg = 10,
+		.mq_msgsize = 128,
+	};
+	mq_unlink("/telemetryd.command");
+	mqd_t mq = mq_open("/telemetryd.command", O_RDONLY | O_NONBLOCK | O_CREAT | O_EXCL, S_IRWXU, &mq_attr);
+	if (mq == (mqd_t)-1) {
+		perror("mq_open");
+		goto fail_mq;
+	}
+
 	time_t scan_read = time_mono();
 	time_t time_i2c = time_mono();
 	time_t time_csense = time_mono();
@@ -344,6 +356,17 @@ int main(int argc, char **argv)
 		/* send commands */
 		time_t now = time_mono();
 		int (*handle_reply)(const char *) = handle_unknown_reply;
+
+		/* Just forward command that we got from telemetry-command.
+		 * Note that it needs to include the newline. */
+		char msg[128];
+		ssize_t msg_len = mq_receive(mq, msg, sizeof(msg), NULL);
+		if (msg_len > 0 && strncmp(msg, "command ", 8) == 0) {
+			const char *cmd = msg+8;
+
+			write(fd, cmd, msg_len-8);
+			handle_reply = handle_unknown_reply;
+		}
 
 		/* 1-wire example */
 		if (now - scan_read >= interval) {
@@ -385,7 +408,7 @@ int main(int argc, char **argv)
 		/* handle command replies */
 		int n = readline(fd, line, sizeof(line));
 		if (n < 0 && n != -EAGAIN)
-			return -1;
+			break;
 		if (n < 1)
 			continue;
 		printf("serial receive: %s\n", line);
@@ -417,6 +440,9 @@ int main(int argc, char **argv)
 
 	}
 
+	mq_close(mq);
+	mq_unlink("/telemetryd.command");
+ fail_mq:
 	tcsetattr(fd, TCSANOW, &sio);
 	close(fd);
 
