@@ -15,8 +15,9 @@
 #define SDA_PIN 0x80
 #define SCL_PIN 0x40
 
-
+#ifndef EFAULT
 #define EFAULT 22
+#endif
 
 int i2c_init(u32 clock)
 {

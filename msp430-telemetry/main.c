@@ -30,7 +30,7 @@
 //define pin on which 1W bus is
 #define GPIO_1W GPIO_P1_5
 
-#define HELLO "wlan-si telemetry 0.2"
+#define HELLO "wlan-si telemetry 0.3"
 #define WATCHDOG_TIMEOUT 300 /* seconds */
 #define UNRESET_TIMEOUT  10 /* seconds */
 #define SCANREAD_TIMEOUT 60 /* seconds */
@@ -40,24 +40,24 @@
  * SELB     P2.6
  * SELA     P2.7
  * SENSEN   P2.5  active high
- * CSENSE   P2.4  470R to gnd U=R/I
+ * CSENSE   P1.4  470R to gnd U=R/I
  */
 #define SELA     GPIO_P2_7
 #define SELB     GPIO_P2_6
-#define SENSEN   GPIO_P2_5
-#define CSENSE   GPIO_P2_4
+#define SENSEN   GPIO_P1_4
+#define CSENSE   GPIO_P2_5
 
 /* list of channels and default values (0 = off, 1 = on) */
 static const struct {
 	gpio_t gpio;
 	int value;
 } channels[] = {
-	{ GPIO_P2_0, 0 },
-	{ GPIO_P2_1, 0 },
-	{ GPIO_P2_2, 0 },
-	{ GPIO_P2_3, 0 },
-	{ GPIO_P1_3, 0 },
-	{ GPIO_P1_4, 0 },
+	{ GPIO_P2_0, 1 },
+	{ GPIO_P2_1, 1 },
+	{ GPIO_P2_2, 1 },
+	{ GPIO_P2_4, 1 },
+	{ GPIO_P2_3, 1 },
+	{ GPIO_P1_3, 1 },
 };
 
 enum gpio_trigger { GPIO_RISING, GPIO_FALLING };
@@ -624,7 +624,7 @@ int main(void)
 	gpio_init(SELB, GPIO_OUTPUT, 0);
 	gpio_init(SENSEN, GPIO_OUTPUT, 0);
 	gpio_init(CSENSE, GPIO_INPUT, 0);
-	ADC10CTL1 = INCH_0; /* set input channel, P1.0 */
+	ADC10CTL1 = INCH_4; /* set input channel, P1.0 */
 	ADC10CTL0 = SREF_1 /* Vref */ + ADC10SHT_2 + REFON + ADC10ON;
 
 	/* initialize channels */
@@ -727,13 +727,13 @@ static void tick_1s_handler(void)
 }
 
 // Timer A0 interrupt service routine
-#ifdef __GNUC__
-__attribute__((interrupt(TIMER0_A0_VECTOR)))
-void Timer_A_ISR(void)
-#else
+//#ifdef __GNUC__
+//__attribute__((interrupt(TIMER0_A0_VECTOR)))
+//void Timer_A_ISR(void)
+//#else
 #pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer_A (void)
-#endif
+//#endif
 {
 	static int second_counter;
 	TACCR0 += 50000; /* 25ms later */
@@ -745,37 +745,37 @@ __interrupt void Timer_A (void)
 }
 
 //RX interrupt
-#ifdef __GNUC__
-__attribute__((interrupt(USCIAB0RX_VECTOR)))
-void USCI0RX_ISR(void)
-#else
+//#ifdef __GNUC__
+//__attribute__((interrupt(USCIAB0RX_VECTOR)))
+//void USCI0RX_ISR(void)
+//#else
 #pragma vector=USCIAB0RX_VECTOR
 __interrupt void USCI0RX_ISR(void)
-#endif
+//#endif
 {
 	circ_buf_put_one(&uart_rx, UCA0RXBUF);
 }
 
 // GPIO interrupts P1
-#ifdef __GNUC__
-__attribute__((interrupt(PORT1_VECTOR)))
-void P1_ISR(void)
-#else
+//#ifdef __GNUC__
+//__attribute__((interrupt(PORT1_VECTOR)))
+//void P1_ISR(void)
+//#else
 #pragma vector=PORT1_VECTOR
 __interrupt void P1_ISR(void)
-#endif
+//#endif
 {
 	gpio_interrupt |= P1IFG;
 	P1IFG = 0;
 }
 // GPIO interrupts P2
-#ifdef __GNUC__
-__attribute__((interrupt(PORT2_VECTOR)))
-void P2_ISR(void)
-#else
+//#ifdef __GNUC__
+//__attribute__((interrupt(PORT2_VECTOR)))
+//void P2_ISR(void)
+//#else
 #pragma vector=PORT2_VECTOR
 __interrupt void P2_ISR(void)
-#endif
+//#endif
 {
 	gpio_interrupt |= P2IFG << 8;
 	P2IFG = 0;
