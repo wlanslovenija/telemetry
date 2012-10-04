@@ -27,7 +27,8 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	mqd_t mq = mq_open("/telemetryd.command", O_WRONLY | O_NONBLOCK);
+	//mqd_t mq = mq_open("/telemetryd.command", O_WRONLY | O_NONBLOCK);
+	int mq = open("/tmp/telemetryd.command", O_WRONLY | O_APPEND | O_NONBLOCK);
 	if (mq == (mqd_t)-1) {
 		perror("mq_open");
 		return -1;
@@ -36,13 +37,15 @@ int main(int argc, char **argv)
 	char msg[128];
 	snprintf(msg, sizeof(msg), "command %s\n", argv[1]);
 
-	int r = mq_send(mq, msg, strlen(msg), 0);
+	//int r = mq_send(mq, msg, strlen(msg), 0);
+	int r = write(mq, msg, strlen(msg));
 	if (r < 0) {
 		perror("mq_send");
 		return -1;
 	}
 
-	mq_close(mq);
+	//mq_close(mq);
+	close(mq);
 
 	return 0;
 }

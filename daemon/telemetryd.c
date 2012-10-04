@@ -291,6 +291,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+#if 1
 	if (tcgetattr(fd, &sio) < 0)
 		return -1;
 
@@ -307,6 +308,7 @@ int main(int argc, char **argv)
 		close(fd);
 		return -1;
 	}
+#endif
 
 	if (!nodaemon)
 		daemonize();
@@ -339,8 +341,10 @@ int main(int argc, char **argv)
 		.mq_maxmsg = 10,
 		.mq_msgsize = 128,
 	};
-	mq_unlink("/telemetryd.command");
-	mqd_t mq = mq_open("/telemetryd.command", O_RDONLY | O_NONBLOCK | O_CREAT | O_EXCL, S_IRWXU, &mq_attr);
+	//mq_unlink("/telemetryd.command");
+	//mqd_t mq = mq_open("/telemetryd.command", O_RDONLY | O_NONBLOCK | O_CREAT | O_EXCL, S_IRWXU, &mq_attr);
+	unlink("/tmp/telemetryd.command");
+	int mq = open("/tmp/telemetryd.command", O_RDONLY | O_NONBLOCK | O_CREAT | O_EXCL, S_IRWXU);
 	if (mq == (mqd_t)-1) {
 		perror("mq_open");
 		goto fail_mq;
@@ -360,11 +364,13 @@ int main(int argc, char **argv)
 		/* Just forward command that we got from telemetry-command.
 		 * Note that it needs to include the newline. */
 		char msg[128];
-		ssize_t msg_len = mq_receive(mq, msg, sizeof(msg), NULL);
+		//ssize_t msg_len = mq_receive(mq, msg, sizeof(msg), NULL);
+		ssize_t msg_len = read(mq, msg, sizeof(msg));
 		if (msg_len > 0 && strncmp(msg, "command ", 8) == 0) {
 			const char *cmd = msg+8;
 
 			write(fd, cmd, msg_len-8);
+			msg[msg_len] = '\0'; printf("%s", &msg[8]);
 			handle_reply = handle_unknown_reply;
 		}
 
@@ -440,8 +446,10 @@ int main(int argc, char **argv)
 
 	}
 
-	mq_close(mq);
-	mq_unlink("/telemetryd.command");
+	//mq_close(mq);
+	//mq_unlink("/telemetryd.command");
+	close(mq);
+	unlink("/telemetryd.command");
  fail_mq:
 	tcsetattr(fd, TCSANOW, &sio);
 	close(fd);
