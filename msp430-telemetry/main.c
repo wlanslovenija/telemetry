@@ -5,6 +5,7 @@
 #define __even_in_range(x, y) x
 
 //#include <isr_compat.h>
+#include <stdlib.h>
 #include "msp430.h"
 #include "stdio.h"
 #include "string.h"
@@ -23,14 +24,14 @@
 #define FAMILY_DS18B20 0x28
 
 //if connected to the router
-//#define BAUDRATE 115200
+#define BAUDRATE 115200
 //if connected to the launchpad
-#define BAUDRATE 9600
+//#define BAUDRATE 9600
 
 //define pin on which 1W bus is
 #define GPIO_1W GPIO_P1_5
 
-#define HELLO "wlan-si telemetry 0.3"
+#define HELLO "wlan-si telemetry 0.4"
 #define WATCHDOG_TIMEOUT 300 /* seconds */
 #define UNRESET_TIMEOUT  10 /* seconds */
 #define SCANREAD_TIMEOUT 60 /* seconds */
@@ -296,10 +297,10 @@ static int handle_1w(const char *line)
 			printf("ERROR:%i\n", n);
 			return 0;
 		}
-		printf("OK:%i 1-wire devices:\n", n);
+//		printf("OK:%i 1-wire devices:\n", n);
 		int i;
 		for (i=0; i<n; i++) {
-			u8 *b = addrs[i].bytes;
+			//u8 *b = addrs[i].bytes;
 			if (addrs[i].bytes[0] == FAMILY_DS18B20) {
 				s16 temp;
 				u8 tmp[9];
@@ -317,20 +318,20 @@ static int handle_1w(const char *line)
 					continue;
 
 				temp = tmp[1]<<8 | tmp[0];
-
+/*
 				printf("1WIRE DS18B20 %02x%02x%02x%02x%02x%02x%02x%02x ",
 						b[0], b[1], b[2], b[3],
 						b[4], b[5], b[6], b[7]);
-				if (temp < 0) {
+*/				if (temp < 0) {
 					printf("-");
 					temp = -temp;
 				}
 				printf("%i.%02i\n", temp>>4, 100*(temp&0xf)/16);
-			} else {
+/*			} else {
 				printf("1WIRE DEV %02x%02x%02x%02x%02x%02x%02x%02x\n",
 						b[0], b[1], b[2], b[3],
 						b[4], b[5], b[6], b[7]);
-			}
+*/			}
 		}
 	} else {
 		printf("ERROR:unknown 1w command '%s'\n", line);
@@ -431,11 +432,11 @@ static int handle_channel(const char *line)
 	line += 2;
 
 	if (strcmp(line, "on") == 0) {
-		printf("OK\n");
+//		printf("OK\n");
 		gpio_set(channels[chn-1].gpio, 1);
 	} else
 	if (strcmp(line, "off") == 0) {
-		printf("OK\n");
+//		printf("OK\n");
 		gpio_set(channels[chn-1].gpio, 0);
 	} else {
 		printf("ERROR:channel arguments\n");
@@ -487,19 +488,19 @@ static int handle_watchdog(const char *line)
 			printf("ERROR:watchdog channel\n");
 			return -1;
 		}
-		printf("OK\n");
+//		printf("OK\n");
 		watchdog_timeout = WATCHDOG_TIMEOUT;
 	} else
 	if (strcmp(line, "off") == 0) {
 		watchdog_channel = 0;
 		watchdog_timeout = 0;
-		printf("OK\n");
+//		printf("OK\n");
 	} else
 	if (strcmp(line, "ping") == 0) {
 		__disable_interrupt();
 		watchdog_timeout = WATCHDOG_TIMEOUT;
 		__enable_interrupt();
-		printf("OK\n");
+//		printf("OK\n");
 	} else {
 		printf("ERROR:watchdog arguments\n");
 	}
@@ -532,6 +533,88 @@ static int handle(const char *line)
 	return 0;
 }
 
+
+/*
+ * ACOM /0 - hello
+ * ACOM /1 - temperature
+ * ACOM /2 - watchdog channel
+ */
+static int handle_acom_read(int reg)
+{
+	if (reg == 0)
+		printf("%s\n", HELLO);
+	else if (reg == 1)
+		handle("1w scan_read");
+	else if (reg == 2)
+		printf("%i\n", watchdog_channel);
+	else if (reg >= 3 && reg <=8) {
+		reg -= 3;
+		printf("%i\n", channels[reg].value);
+	}
+	else
+		return 1;
+	return 0;
+}
+
+/*
+ * ACOM /0 - write test
+ * ACOM /1 - nothing
+ * ACOM /2 - watchdog channel
+ * ACOM /3 - channel 1 state
+ * ACOM /4 - channel 2 state
+ * ACOM /5 - channel 3 state
+ * ACOM /6 - channel 4 state
+ * ACOM /7 - channel 5 state
+ * ACOM /8 - channel 6 state
+ */
+static int handle_acom_write(int reg, int value)
+{
+	char buf[32];
+
+	if (reg == 0)
+		printf("%i\n", value);
+	else if (reg == 2) {
+		if (value == 0)
+			handle("watchdog off");
+		else {
+			sprintf(buf, "watchdog on %i", value);
+			handle(buf);
+		}
+	} else if (reg >= 3 && reg <=8) {
+		reg -= 3;
+		sprintf(buf, "channel %i %s", reg+1, value?"on":"off");
+		handle(buf);
+	}
+	else
+		return 1;
+	return 0;
+}
+
+
+static int handle_acom(const char *line)
+{
+	int reg = -1;
+	int value = -1;
+
+	handle("watchdog ping");
+
+	line += 6;
+	if (isdigit(line[0]))
+		reg = atoi(line);
+	line = strchr(line, ' ');
+	if (line) {
+		line++;
+		if (isdigit(line[0]))
+			value = atoi(line);
+	}
+
+	if (value != -1)
+		return handle_acom_write(reg, value);
+	else if (reg != -1)
+		return handle_acom_read(reg);
+
+	return 1;
+}
 
 static void msp430_gpio_interrupt(gpio_t gpio, enum gpio_trigger trigger)
 {
@@ -651,7 +734,7 @@ int main(void)
 
 		if (!initialized && scanread_pending) {
 			scanread_pending = 0;
-			handle("1w scan_read");
+// don't do auto scan_read			handle("1w scan_read");
 		}
 		if (reset_pending) {
 			printf("WATCHDOG reset\n");
@@ -673,7 +756,7 @@ int main(void)
 		if (tmp < 0)
 			continue;
 
-		putchar(tmp);
+		//putchar(tmp);
 
 		if (tmp == '\r' || tmp == '\n' || line_pos == sizeof(line)-1) {
 			line[line_pos] = '\0';
@@ -683,7 +766,10 @@ int main(void)
 			for (i=0; i<line_pos; i++)
 				line[i] = tolower(line[i]);
 
-			handle(line);
+			if (strncmp(line, "acom /", 6) == 0)
+				handle_acom(line);
+			else
+				handle(line);
 			line_pos = 0;
 			continue;
 		}
@@ -697,6 +783,9 @@ int main(void)
 
 int putchar(int c)
 {
+	if (c == '\n')
+		putchar('\r');
+
 	while (!(IFG2 & UCA0TXIFG))
 		;
 	UCA0TXBUF = c;

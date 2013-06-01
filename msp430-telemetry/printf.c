@@ -28,6 +28,8 @@
  * avr:    3136 | 1926 |  544
  */
 
+#define SIZE 1
+int putchar(int c);
 
 /* "features"
  * - %.2s for NULL - what does std say?
