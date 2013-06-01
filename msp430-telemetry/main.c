@@ -32,7 +32,7 @@
 #define GPIO_1W GPIO_P1_5
 
 #define HELLO "wlan-si telemetry 0.4"
-#define WATCHDOG_TIMEOUT 300 /* seconds */
+#define WATCHDOG_TIMEOUT 660 /* seconds */
 #define UNRESET_TIMEOUT  10 /* seconds */
 #define SCANREAD_TIMEOUT 60 /* seconds */
 
@@ -429,6 +429,10 @@ static int handle_channel(const char *line)
 		printf("ERROR:channel arguments\n");
 		return -1;
 	}
+	if (chn == watchdog_channel) {
+		printf("ERROR:channel forbidden to control watchdog\n");
+		return -1;
+	}
 	line += 2;
 
 	if (strcmp(line, "on") == 0) {
@@ -471,11 +475,15 @@ static int handle_csense(void)
 		gpio_set(SELB, (i&2) == 2);
 		gpio_set(SENSEN, 1);
 		mdelay(1); /* csense delay is max 500us */
-		printf("CSENSE %i %i\n", i+1, adc_read());
+//		printf("CSENSE %i %i\n", i+1, adc_read());
+		if (i)
+			printf(",");
+		printf("%i", adc_read());
 
 		gpio_set(SENSEN, 0);
 	}
-	printf("OK\n");
+	printf("\n");
+//	printf("OK\n");
 
 	return 0;
 }
@@ -538,6 +546,7 @@ static int handle(const char *line)
  * ACOM /0 - hello
  * ACOM /1 - temperature
  * ACOM /2 - watchdog channel
+ * ACOM /9 - csense
  */
 static int handle_acom_read(int reg)
 {
@@ -551,6 +560,8 @@ static int handle_acom_read(int reg)
 		reg -= 3;
 		printf("%i\n", channels[reg].value);
 	}
+	else if (reg == 9)
+		handle("csense");
 	else
 		return 1;
 	return 0;
